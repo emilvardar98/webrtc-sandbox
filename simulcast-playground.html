@@ -452,6 +452,17 @@
 
       const removeTilde = (r) => r.startsWith('~') ? r.substring(1) : r;
 
+      function enableCorruptionDetection(transceiver) {
+        const extensions = transceiver.getHeaderExtensionsToNegotiate();
+        for (let i = 0; i < extensions.length; ++i) {
+          if (extensions[i].uri.includes('corruption-detection')) {
+            console.log('corruption-detection ext found!');
+            extensions[i].direction = 'sendrecv';
+          }
+        }
+        transceiver.setHeaderExtensionsToNegotiate(extensions);
+      }
+
       const setupPeerConnection = async () => {
         stopPeerConnection();
 
@@ -611,6 +622,7 @@
 
         pc1.oniceconnectionstatechange = (e) => log(pc1.iceConnectionState);
         pc1.onnegotiationneeded = async (e) => {
+          enableCorruptionDetection(pc1.getTransceivers()[0]);
           let pc1Offer = await pc1.createOffer();
           if (resolution.value.includes('-conference')) {
             pc1Offer = addConferenceFlag(pc1Offer);
@@ -631,6 +643,7 @@
           console.log('pc2 offer: ' + pc2Offer.sdp);
           await pc2.setRemoteDescription(pc2Offer);
 
+          enableCorruptionDetection(pc2.getTransceivers()[0]);
           const answer = await pc2.createAnswer();
           await pc2.setLocalDescription(answer);
           let pc1Answer = {
