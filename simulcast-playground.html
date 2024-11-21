@@ -455,7 +455,9 @@
       const recorders = {};
       const recordings = [];
 
-      let previousCorruptionProbability;
+      let previousCorruptionProbability = 0;
+      // Corresponds to 30 seconds
+      const kMaxCorruptionMeasurementsPerTime = 30
       // Set up chart for plotting corruption detection
       const ctx = document.getElementById('corruptionScoreGraph').getContext('2d');
       const corruptionScoreChart = new Chart(ctx, {
@@ -470,6 +472,18 @@
           }]
         },
         options: {
+          scales : {
+            x : {
+              ticks: {
+                display: false
+              },
+              grid: {
+                drawOnChartArea: false,
+                drawBorder: false,
+              },
+              display: false
+            }
+          },
           animation : {
               duration: 0
           },
@@ -521,7 +535,15 @@
           corruptionMeasurements = findStat(pc2GetStats, 'inbound-rtp').corruptionMeasurements;
         } catch (e) {}
         const currentTimeSeconds = currentTime / 1000;
-        corruptionScoreChart.data.datasets[0].data.push({x:currentTimeSeconds, y:totalCorruptionProbability - previousCorruptionProbability});
+        if (totalCorruptionProbability >= previousCorruptionProbability) {
+          corruptionScoreChart.data.datasets[0].data.push({x:currentTimeSeconds, y:totalCorruptionProbability - previousCorruptionProbability});
+        } else {
+          // If a new call has been started
+          corruptionScoreChart.data.datasets[0].data = [{x:currentTimeSeconds, y:totalCorruptionProbability}];
+        }
+        if (corruptionScoreChart.data.datasets[0].data.length > kMaxCorruptionMeasurementsPerTime) {
+          corruptionScoreChart.data.datasets[0].data.shift();
+        }
         corruptionScoreChart.update();
         previousCorruptionProbability = totalCorruptionProbability;
 
