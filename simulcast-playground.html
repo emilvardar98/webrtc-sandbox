@@ -16,6 +16,14 @@
         max-width: 90%;
       }
 
+      .corruptionStatsBox {
+        display: inline-block;
+        border: 1px solid black;
+        margin: 5px 5px 5px 5px;
+        padding: 5px 5px 5px 5px;
+        max-width: 90%;
+      }
+
       video {
         max-width: 600px;
       }
@@ -314,6 +322,25 @@
       </details>
     </div>
     <br />
+    <div class="corruptionStatsBox">
+      <b>Corruption Stats</b>
+      <br />
+      Total corruption probability:
+      <span id="totalCorruptionProbability">0</span> 
+      <br />
+      Mean corruption probability:
+      <span id="meanCorruptionProbability">0</span> 
+      <br />
+      Total squared corruption probability:
+      <span id="totalSquaredCorruptionProbability">0</span> 
+      <br />
+      Mean squared corruption probability:
+      <span id="meanSquaredCorruptionProbability">0</span> 
+    </div>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js">
+    </script>
+    <canvas id="corruptionScoreGraph" style="width:100%;max-width:1000px"></canvas>
     <div id="recordingListBox" style="display: none">
       <details open>
         <summary>Recordings</summary>
@@ -428,6 +455,27 @@
       const recorders = {};
       const recordings = [];
 
+      let previousCorruptionProbability;
+      // Set up chart for plotting corruption detection
+      const ctx = document.getElementById('corruptionScoreGraph').getContext('2d');
+      const corruptionScoreChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          // TODO: decide whether we want time or #measurements etc. on x-axis.
+          datasets: [{
+            label: 'P(Corruption)',
+            data: [],
+            pointRadius: 4,
+            pointBackgroundColor: "rgba(75, 192, 192, 1)",
+          }]
+        },
+        options: {
+          animation : {
+              duration: 0
+          },
+        }
+      });
+
       const stopPeerConnection = () => {
         if (pc1) {
           pc1.close();
@@ -461,6 +509,29 @@
           }
         }
         transceiver.setHeaderExtensionsToNegotiate(extensions);
+      }
+
+      async function UpdateCorruptionMetricsAndGraph(pc2GetStats, currentTime) {
+        let totalCorruptionProbability;
+        let totalSquaredCorruptionProbability;
+        let corruptionMeasurements;
+        try {
+          totalCorruptionProbability = findStat(pc2GetStats, 'inbound-rtp').totalCorruptionProbability;
+          totalSquaredCorruptionProbability = findStat(pc2GetStats, 'inbound-rtp').totalSquaredCorruptionProbability;
+          corruptionMeasurements = findStat(pc2GetStats, 'inbound-rtp').corruptionMeasurements;
+        } catch (e) {}
+        const currentTimeSeconds = currentTime / 1000;
+        corruptionScoreChart.data.datasets[0].data.push({x:currentTimeSeconds, y:totalCorruptionProbability - previousCorruptionProbability});
+        corruptionScoreChart.update();
+        previousCorruptionProbability = totalCorruptionProbability;
+
+        let corruptionBox = document.querySelector('.corruptionStatsBox');
+        const meanCorruptionProbability = totalCorruptionProbability / corruptionMeasurements;
+        const meanSquaredCorruptionProbability = totalSquaredCorruptionProbability / corruptionMeasurements;
+        corruptionBox.querySelector('#totalCorruptionProbability').innerText = `${totalCorruptionProbability}`;
+        corruptionBox.querySelector('#meanCorruptionProbability').innerText = `${meanCorruptionProbability}`;
+        corruptionBox.querySelector('#totalSquaredCorruptionProbability').innerText = `${totalSquaredCorruptionProbability}`;
+        corruptionBox.querySelector('#meanSquaredCorruptionProbability').innerText = `${meanSquaredCorruptionProbability}`;
       }
 
       const setupPeerConnection = async () => {
@@ -613,6 +684,8 @@
                   lastBitrateMesurementTime = currentTime;
                   lastBytesSent = bytesSent;
                   lastBytesReceived = bytesReceived;
+
+                  await UpdateCorruptionMetricsAndGraph(s2, currentTime);
                 }, 1000),
             );
           } catch (e) {
